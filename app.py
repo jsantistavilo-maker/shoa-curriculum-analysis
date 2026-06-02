@@ -4,11 +4,13 @@ Dashboard de Análisis Curricular Comparativo — SHOA vs Currículos Internacio
 Ejecutar con:   streamlit run app.py
 """
 
+import base64
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from pathlib import Path
 
 from datetime import date
 from data_loader import CURRICULA, CURRICULA_LABELS, load_data
@@ -31,25 +33,82 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# CSS con paleta institucional
+# CSS institucional SHOA
 st.markdown("""
 <style>
-    .stApp { background-color: #F8F9FA; }
-    .block-container { padding-top: 1.5rem; padding-bottom: 2rem; }
-    h1, h2, h3 { color: #003366; }
+    .stApp { background-color: #FFFFFF; }
+    .block-container { padding-top: 1rem; padding-bottom: 2rem; }
+    h2, h3 { color: #003366; }
+
+    /* Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        background-color: #F2F4F7;
+        border-radius: 8px;
+        padding: 4px;
+        gap: 4px;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #003366 !important;
+        color: white !important;
+        border-radius: 6px;
+    }
+
+    /* Métricas */
+    [data-testid="metric-container"] {
+        background-color: white;
+        border: 1px solid #E8ECF0;
+        border-top: 4px solid #003366;
+        border-radius: 8px;
+        padding: 16px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+    }
+
+    /* Sidebar */
+    [data-testid="stSidebar"] {
+        background-color: #003366 !important;
+    }
+    [data-testid="stSidebar"] .stMarkdown,
+    [data-testid="stSidebar"] label,
+    [data-testid="stSidebar"] .stRadio > label,
+    [data-testid="stSidebar"] p,
+    [data-testid="stSidebar"] span {
+        color: white !important;
+    }
+    [data-testid="stSidebar"] .stSelectbox > div > div {
+        background-color: #004A8F;
+        color: white;
+    }
+
+    /* Botones */
+    .stButton > button {
+        background-color: #003366;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-weight: 500;
+        transition: all 0.2s;
+    }
+    .stButton > button:hover {
+        background-color: #004A8F;
+        border-left: 3px solid #C8A84B;
+    }
+
+    /* Tarjetas de módulos */
     .metric-card {
         background: #FFFFFF;
         border-left: 4px solid #003366;
-        border-radius: 6px;
+        border-radius: 8px;
         padding: 0.8rem 1rem;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+        box-shadow: 0 2px 6px rgba(0,0,0,0.08);
         margin-bottom: 0.5rem;
     }
-    .tag-sobre  { background:#FFDDDD; color:#CC0000; padding:2px 8px; border-radius:4px; font-weight:bold; }
-    .tag-sub    { background:#DDEEFF; color:#003399; padding:2px 8px; border-radius:4px; font-weight:bold; }
-    .tag-alin   { background:#DDFFDD; color:#006600; padding:2px 8px; border-radius:4px; font-weight:bold; }
-    .tag-alta   { background:#FF4444; color:#FFFFFF; padding:2px 8px; border-radius:4px; font-weight:bold; }
-    .tag-media  { background:#FFAA00; color:#333333; padding:2px 8px; border-radius:4px; font-weight:bold; }
+
+    /* Tags de clasificación */
+    .tag-sobre { background:#FADBD8; color:#C0392B; padding:2px 8px; border-radius:4px; font-weight:bold; }
+    .tag-sub   { background:#D6EAF8; color:#2471A3; padding:2px 8px; border-radius:4px; font-weight:bold; }
+    .tag-alin  { background:#D5F5E3; color:#1A7A4A; padding:2px 8px; border-radius:4px; font-weight:bold; }
+    .tag-alta  { background:#C0392B; color:#FFFFFF; padding:2px 8px; border-radius:4px; font-weight:bold; }
+    .tag-media { background:#F39C12; color:#FFFFFF; padding:2px 8px; border-radius:4px; font-weight:bold; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -57,13 +116,48 @@ st.markdown("""
 # Paleta de colores coherente para los gráficos
 # ---------------------------------------------------------------------------
 COLOR_MAP = {
-    "shoa":    "#003366",  # azul marino
-    "padilla": "#CC4400",  # naranja oscuro
-    "sweden":  "#007755",  # verde oscuro
-    "uss":     "#7700CC",  # violeta
-    "ucl":     "#CC0055",  # rojo oscuro
+    "shoa":    "#003366",  # azul marino oscuro
+    "padilla": "#0077C8",  # azul medio
+    "sweden":  "#C8A84B",  # dorado
+    "uss":     "#1A7A4A",  # verde
+    "ucl":     "#6C3483",  # morado
 }
 COLORS_LIST = list(COLOR_MAP.values())
+
+# ---------------------------------------------------------------------------
+# Logo institucional
+# ---------------------------------------------------------------------------
+
+def _logo_html(ancho: int = 150) -> str:
+    """Retorna HTML embebible del logo (base64 PNG/JPG o SVG inline)."""
+    for ext, mime in [("png", "image/png"), ("jpg", "image/jpeg")]:
+        p = Path(f"assets/logo_shoa.{ext}")
+        if p.exists():
+            b64 = base64.b64encode(p.read_bytes()).decode()
+            return (f'<img src="data:{mime};base64,{b64}" width="{ancho}" '
+                    f'style="max-height:{int(ancho*0.6)}px;object-fit:contain;">')
+    svg_p = Path("assets/logo_shoa.svg")
+    if svg_p.exists():
+        svg = svg_p.read_text(encoding="utf-8")
+        h = int(ancho * 0.4)
+        svg = svg.replace('width="200"', f'width="{ancho}"').replace('height="80"', f'height="{h}"')
+        return svg
+    h = int(ancho * 0.4)
+    return (f'<svg width="{ancho}" height="{h}" xmlns="http://www.w3.org/2000/svg">'
+            f'<rect width="{ancho}" height="{h}" fill="#003366" rx="6"/>'
+            f'<text x="{ancho//2}" y="{int(h*0.42)}" font-family="Arial" '
+            f'font-size="{int(ancho*0.14)}" font-weight="bold" fill="#C8A84B" '
+            f'text-anchor="middle">&#9875; SHOA</text></svg>')
+
+
+def mostrar_logo(ancho: int = 200) -> None:
+    """Muestra el logo SHOA en la posición actual (imagen o SVG placeholder)."""
+    p = Path("assets/logo_shoa.png")
+    if p.exists():
+        st.image(str(p), width=ancho)
+    else:
+        st.markdown(_logo_html(ancho), unsafe_allow_html=True)
+
 
 # ---------------------------------------------------------------------------
 # Carga de datos con caché
@@ -88,17 +182,17 @@ def _tag(clasificacion: str) -> str:
 
 def _color_clasif(val):
     colors = {
-        "SOBREVALORADO": "background-color:#FFDDDD",
-        "SUBVALORADO":   "background-color:#DDEEFF",
-        "ALINEADO":      "background-color:#DDFFDD",
+        "SOBREVALORADO": "background-color:#FADBD8;color:#C0392B",
+        "SUBVALORADO":   "background-color:#D6EAF8;color:#2471A3",
+        "ALINEADO":      "background-color:#D5F5E3;color:#1A7A4A",
     }
     return colors.get(val, "")
 
 
 def _color_urgencia(val):
     colors = {
-        "ALTA":  "background-color:#FF9999;font-weight:bold",
-        "MEDIA": "background-color:#FFD966",
+        "ALTA":  "background-color:#FADBD8;color:#C0392B;font-weight:bold",
+        "MEDIA": "background-color:#FEF9E7;color:#F39C12",
     }
     return colors.get(val, "")
 
@@ -148,7 +242,7 @@ def _bar_comparison(df: pd.DataFrame, title: str = "Comparativa de horas por mó
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         height=480,
         plot_bgcolor="#FFFFFF",
-        paper_bgcolor="#F8F9FA",
+        paper_bgcolor="#F2F4F7",
         font=dict(size=11),
         margin=dict(b=120),
     )
@@ -170,9 +264,9 @@ def _heatmap_deltas(df_a: pd.DataFrame):
         text=text_z,
         texttemplate="%{text}",
         colorscale=[
-            [0.0, "#0055CC"],   # azul = SHOA tiene MENOS
+            [0.0, "#2471A3"],   # azul = SHOA tiene MENOS
             [0.5, "#FFFFFF"],   # blanco = iguales
-            [1.0, "#CC3300"],   # rojo = SHOA tiene MÁS
+            [1.0, "#C0392B"],   # rojo = SHOA tiene MÁS
         ],
         zmid=0,
         colorbar=dict(title="Δ horas<br>(SHOA – Intl)"),
@@ -185,7 +279,7 @@ def _heatmap_deltas(df_a: pd.DataFrame):
         yaxis_title="Sub-tópico",
         height=max(400, 22 * len(df_a)),
         plot_bgcolor="#FFFFFF",
-        paper_bgcolor="#F8F9FA",
+        paper_bgcolor="#F2F4F7",
         margin=dict(l=260, r=20, t=60, b=20),
         font=dict(size=10),
     )
@@ -225,7 +319,7 @@ def _radar_chart(df_topics: pd.DataFrame):
         title="Perfil curricular comparado (% del total por tópico)",
         legend=dict(orientation="h", yanchor="bottom", y=-0.25),
         height=520,
-        paper_bgcolor="#F8F9FA",
+        paper_bgcolor="#F2F4F7",
     )
     return fig
 
@@ -234,9 +328,9 @@ def _horizontal_bar_delta(df_a: pd.DataFrame):
     """Barras horizontales ordenadas por delta promedio."""
     df_plot = df_a.sort_values("delta_avg", ascending=True).copy()
     colors = df_plot["clasificacion"].map({
-        "SOBREVALORADO": "#CC3300",
-        "SUBVALORADO":   "#0055CC",
-        "ALINEADO":      "#558855",
+        "SOBREVALORADO": "#C0392B",
+        "SUBVALORADO":   "#2471A3",
+        "ALINEADO":      "#1A7A4A",
     })
 
     fig = go.Figure(go.Bar(
@@ -253,7 +347,7 @@ def _horizontal_bar_delta(df_a: pd.DataFrame):
         yaxis_title="Sub-tópico",
         height=max(400, 20 * len(df_plot)),
         plot_bgcolor="#FFFFFF",
-        paper_bgcolor="#F8F9FA",
+        paper_bgcolor="#F2F4F7",
         margin=dict(l=260, r=20, t=60, b=40),
         font=dict(size=10),
     )
@@ -274,11 +368,11 @@ def _treemap_excess(df_a: pd.DataFrame):
         path=["urgencia_label", "nombre"],
         values="exceso_h",
         color="delta_avg_pct",
-        color_continuous_scale=["#FFEECC", "#CC3300"],
+        color_continuous_scale=["#FADBD8", "#C0392B"],
         title="Distribución del exceso de horas — Módulos Sobrevalorados",
         labels={"delta_avg_pct": "% exceso", "exceso_h": "Horas exceso"},
     )
-    fig.update_layout(height=460, paper_bgcolor="#F8F9FA")
+    fig.update_layout(height=460, paper_bgcolor="#F2F4F7")
     return fig
 
 
@@ -287,11 +381,25 @@ def _treemap_excess(df_a: pd.DataFrame):
 # ===========================================================================
 
 def main():
-    st.title("🧭 Análisis Curricular Comparativo — SHOA")
-    st.markdown(
-        "Comparación del currículo de hidrografía del **SHOA (Chile)** "
-        "con cuatro currículos internacionales de referencia."
-    )
+    # ── Header institucional ──────────────────────────────────────────────
+    logo_h = _logo_html(ancho=130)
+    st.markdown(f"""
+<div style="background:linear-gradient(135deg,#003366 0%,#004A8F 100%);
+            padding:18px 24px 14px;border-radius:10px;
+            border-bottom:4px solid #C8A84B;margin-bottom:18px;">
+  <div style="display:flex;align-items:center;gap:20px;">
+    <div style="flex-shrink:0;">{logo_h}</div>
+    <div>
+      <h1 style="color:#FFFFFF;margin:0;font-size:1.55rem;font-weight:700;letter-spacing:0.3px;">
+        Análisis Curricular Comparativo</h1>
+      <p style="color:#C8A84B;margin:5px 0 0;font-size:0.92rem;font-weight:600;">
+        SHOA vs Currículos Internacionales IHO</p>
+      <p style="color:rgba(255,255,255,0.65);margin:2px 0 0;font-size:0.75rem;">
+        Servicio Hidrográfico y Oceanográfico de la Armada de Chile</p>
+    </div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
     # -----------------------------------------------------------------------
     # Cargar datos
@@ -302,12 +410,27 @@ def main():
         st.error(f"### Error al cargar los datos\n\n{error}")
         st.stop()
 
+    # ── Sidebar institucional ──────────────────────────────────────────────
+    logo_sb = _logo_html(ancho=110)
+    st.sidebar.markdown(f"""
+<div style="text-align:center;padding:14px 0 8px;">{logo_sb}</div>
+<hr style="border:none;border-top:1px solid #C8A84B;margin:6px 0 12px;">
+""", unsafe_allow_html=True)
+
     _modo_json = data.get("modo") == "json"
     if _modo_json:
         meta = data.get("metadata", {})
-        st.sidebar.success(f"📊 Datos: Versión {meta.get('fecha_generacion', '—')}")
+        st.sidebar.markdown(
+            f"<p style='font-size:0.78rem;color:rgba(255,255,255,0.8);text-align:center;"
+            f"margin:0;'>📊 Datos: Versión {meta.get('fecha_generacion','—')}</p>",
+            unsafe_allow_html=True,
+        )
     else:
-        st.sidebar.success(f"✅ Datos cargados\n`{data['file_path']}`")
+        st.sidebar.markdown(
+            f"<p style='font-size:0.78rem;color:rgba(255,255,255,0.8);text-align:center;"
+            f"margin:0;'>✅ Fuente: Excel local</p>",
+            unsafe_allow_html=True,
+        )
 
     df_leaves    = data["df_leaves"]
     df_subtopics = data["df_subtopics"]
@@ -425,13 +548,13 @@ def main():
             values="Cantidad",
             color="Clasificación",
             color_discrete_map={
-                "SOBREVALORADO": "#CC3300",
-                "SUBVALORADO":   "#0055CC",
-                "ALINEADO":      "#44BB44",
+                "SOBREVALORADO": "#C0392B",
+                "SUBVALORADO":   "#2471A3",
+                "ALINEADO":      "#1A7A4A",
             },
             hole=0.4,
         )
-        fig_pie.update_layout(height=320, paper_bgcolor="#F8F9FA")
+        fig_pie.update_layout(height=320, paper_bgcolor="#F2F4F7")
         st.plotly_chart(fig_pie, use_container_width=True)
 
         st.divider()
@@ -700,12 +823,12 @@ def main():
                     f"{CURRICULA_LABELS[c]} ({r[c]:.1f}h)" for c in curricula_mayor
                 )
                 st.markdown(f"""
-                <div class="metric-card" style="border-left-color:#0055CC">
+                <div class="metric-card" style="border-left-color:#2471A3">
                     <b>{r['nombre']}</b><br>
                     <small>
                     SHOA: <b>{r['shoa']:.1f} h</b> |
                     Prom. Intl: <b>{r['intl_avg']:.1f} h</b> |
-                    Déficit: <span style="color:#0055CC"><b>{r['delta_avg']:.1f} h ({r['delta_avg_pct']:+.0f}%)</b></span><br>
+                    Déficit: <span style="color:#2471A3"><b>{r['delta_avg']:.1f} h ({r['delta_avg_pct']:+.0f}%)</b></span><br>
                     Curricula que lo priorizan: {curricula_str if curricula_str else "—"}
                     </small>
                 </div>
@@ -914,7 +1037,7 @@ Si se implementan todas las recomendaciones:
                 yaxis_title="Asignatura SHOA",
                 height=max(420, 30 * len(df_asgn)),
                 plot_bgcolor="#FFFFFF",
-                paper_bgcolor="#F8F9FA",
+                paper_bgcolor="#F2F4F7",
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                 margin=dict(l=260, r=20, t=50, b=40),
                 font=dict(size=10),
@@ -933,10 +1056,10 @@ Si se implementan todas las recomendaciones:
             fig_a2 = go.Figure()
             curricula_g2 = [
                 ("SHOA (Chile)",       "horas_shoa",    "#003366"),
-                ("Padilla (Colombia)", "horas_padilla", "#CC4400"),
-                ("Sweden",             "horas_sweden",  "#007755"),
-                ("USS",                "horas_uss",     "#7700CC"),
-                ("UCL",                "horas_ucl",     "#CC0055"),
+                ("Padilla (Colombia)", "horas_padilla", "#0077C8"),
+                ("Sweden",             "horas_sweden",  "#C8A84B"),
+                ("USS",                "horas_uss",     "#1A7A4A"),
+                ("UCL",                "horas_ucl",     "#6C3483"),
             ]
             for label, col, color in curricula_g2:
                 fig_a2.add_trace(go.Bar(
@@ -954,7 +1077,7 @@ Si se implementan todas las recomendaciones:
                 yaxis_title="Horas totales",
                 height=460,
                 plot_bgcolor="#FFFFFF",
-                paper_bgcolor="#F8F9FA",
+                paper_bgcolor="#F2F4F7",
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                 margin=dict(b=140, t=50, l=20, r=20),
                 font=dict(size=10),
@@ -979,9 +1102,9 @@ Si se implementan todas las recomendaciones:
                 text=z_text,
                 texttemplate="%{text}",
                 colorscale=[
-                    [0.0, "#0055CC"],
+                    [0.0, "#2471A3"],
                     [0.5, "#FFFFFF"],
-                    [1.0, "#CC3300"],
+                    [1.0, "#C0392B"],
                 ],
                 zmid=0,
                 colorbar=dict(title="Δ horas<br>(SHOA – Intl)"),
@@ -992,7 +1115,7 @@ Si se implementan todas las recomendaciones:
                 yaxis_title="Asignatura SHOA",
                 height=max(420, 24 * len(df_asgn)),
                 plot_bgcolor="#FFFFFF",
-                paper_bgcolor="#F8F9FA",
+                paper_bgcolor="#F2F4F7",
                 margin=dict(l=260, r=20, t=40, b=20),
                 font=dict(size=10),
             )
@@ -1024,10 +1147,10 @@ Si se implementan todas las recomendaciones:
 
             def _color_clf_a(val):
                 return {
-                    "SOBREESTIMADA":  "background-color:#FFCCCC",
-                    "SUBESTIMADA":    "background-color:#CCE0FF",
-                    "ALINEADA":       "background-color:#CCFFCC",
-                    "EXCLUSIVA SHOA": "background-color:#E4C1F9",
+                    "SOBREESTIMADA":  "background-color:#FADBD8;color:#C0392B",
+                    "SUBESTIMADA":    "background-color:#D6EAF8;color:#2471A3",
+                    "ALINEADA":       "background-color:#D5F5E3;color:#1A7A4A",
+                    "EXCLUSIVA SHOA": "background-color:#E8DAEF;color:#6C3483",
                 }.get(val, "")
 
             cols_show_a = [
@@ -1076,15 +1199,38 @@ Si se implementan todas las recomendaciones:
                 use_container_width=True,
             )
 
-    # -----------------------------------------------------------------------
-    # Footer
-    # -----------------------------------------------------------------------
-    st.divider()
-    st.caption(
-        "Dashboard generado automáticamente · Datos: Tabla resumen.xlsx · "
-        f"Sub-tópicos analizados: {len(df_analyzed)} · "
-        f"Umbral de clasificación: ±15%"
-    )
+    # ── Footer sidebar ────────────────────────────────────────────────────
+    st.sidebar.markdown("""
+<hr style="border:none;border-top:1px solid rgba(200,168,75,0.5);margin-top:20px;">
+<div style="text-align:center;padding:8px 0 4px;font-size:0.68rem;
+            color:rgba(255,255,255,0.55);line-height:1.5;">
+  © SHOA — Armada de Chile<br>
+  Análisis IHO S-5A | Valparaíso
+</div>
+""", unsafe_allow_html=True)
+
+    # ── Footer principal ──────────────────────────────────────────────────
+    logo_ft = _logo_html(ancho=52)
+    st.markdown(f"""
+<div style="border-top:3px solid #C8A84B;padding:14px 0 6px;margin-top:8px;
+            display:flex;align-items:center;justify-content:space-between;
+            flex-wrap:wrap;gap:10px;">
+  <div style="display:flex;align-items:center;gap:12px;">
+    {logo_ft}
+    <div>
+      <p style="margin:0;font-size:0.78rem;color:#2C3E50;font-weight:600;">
+        Servicio Hidrográfico y Oceanográfico de la Armada de Chile</p>
+      <p style="margin:0;font-size:0.7rem;color:#888;">
+        Errázuriz 254, Playa Ancha, Valparaíso &nbsp;·&nbsp; shoa.cl</p>
+    </div>
+  </div>
+  <div style="text-align:right;">
+    <p style="margin:0;font-size:0.7rem;color:#888;">
+      Dashboard v1.0 &nbsp;·&nbsp; Análisis IHO S-5A<br>
+      {len(df_analyzed)} sub-tópicos &nbsp;·&nbsp; Umbral ±15%</p>
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
 
 if __name__ == "__main__":

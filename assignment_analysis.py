@@ -30,17 +30,17 @@ _ALT  = PatternFill("solid", fgColor="F5F5F5")   # fila alternada
 _TOT  = PatternFill("solid", fgColor="FFF2CC")   # fila total
 
 CLASIF_FILL = {
-    "SOBREESTIMADA":  PatternFill("solid", fgColor="FFCCCC"),
-    "SUBESTIMADA":    PatternFill("solid", fgColor="CCE0FF"),
-    "ALINEADA":       PatternFill("solid", fgColor="CCFFCC"),
-    "EXCLUSIVA SHOA": PatternFill("solid", fgColor="E4C1F9"),
+    "SOBREESTIMADA":  PatternFill("solid", fgColor="FADBD8"),
+    "SUBESTIMADA":    PatternFill("solid", fgColor="D6EAF8"),
+    "ALINEADA":       PatternFill("solid", fgColor="D5F5E3"),
+    "EXCLUSIVA SHOA": PatternFill("solid", fgColor="E8DAEF"),
 }
 
 CLASIF_COLORS_HEX = {
-    "SOBREESTIMADA":  "#CC3300",
-    "SUBESTIMADA":    "#0055CC",
-    "ALINEADA":       "#44BB44",
-    "EXCLUSIVA SHOA": "#7700CC",
+    "SOBREESTIMADA":  "#C0392B",
+    "SUBESTIMADA":    "#2471A3",
+    "ALINEADA":       "#1A7A4A",
+    "EXCLUSIVA SHOA": "#6C3483",
 }
 
 _THIN = Border(
