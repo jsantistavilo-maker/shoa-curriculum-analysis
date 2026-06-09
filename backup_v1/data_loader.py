@@ -161,44 +161,6 @@ def _section_letter(leaf: str) -> str:
 # Función principal de carga
 # ---------------------------------------------------------------------------
 
-_HORAS_SHEET = "Horas_Asignaturas_SHOA"
-_CODE_RE      = re.compile(r'^([A-Za-z]+\s*\d+)')
-
-
-def _read_horas_asignaturas(excel_path: str) -> dict:
-    """
-    Lee la hoja 'Horas_Asignaturas_SHOA', consolida por código de asignatura
-    y retorna {código: {nombre, T, P, SG, Total}}.
-    Imprime advertencias si T+P+SG ≠ Total.
-    """
-    try:
-        df = pd.read_excel(excel_path, sheet_name=_HORAS_SHEET,
-                           header=None, engine="openpyxl")
-    except Exception:
-        return {}
-
-    df.columns = range(len(df.columns))
-    # Saltar encabezado y filas vacías
-    df = df[df[0].notna() & (df[0].astype(str).str.strip() != "Module & Content")].copy()
-    df["codigo"] = df[0].astype(str).str.extract(_CODE_RE, expand=False)
-    df = df[df["codigo"].notna()].copy()
-
-    for col in [2, 3, 4]:
-        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
-
-    result: dict = {}
-    for code, grp in df.groupby("codigo"):
-        nombre = (grp[1].mode().iloc[0]
-                  if not grp[1].mode().empty else str(grp[1].iloc[0]))
-        T  = float(grp[2].sum())
-        P  = float(grp[3].sum())
-        SG = float(grp[4].sum())
-        total = round(T + P + SG, 2)
-        result[code] = {"nombre": str(nombre), "T": T, "P": P, "SG": SG, "Total": total}
-
-    return result
-
-
 def _load_from_json(path: Path) -> tuple[dict | None, str | None]:
     """Carga los datos curriculares desde el JSON pre-procesado (modo online)."""
     try:
@@ -216,16 +178,15 @@ def _load_from_json(path: Path) -> tuple[dict | None, str | None]:
 
         meta = raw.get("metadata", {})
         return {
-            "df_leaves":          df_leaves,
-            "df_subtopics":       df_subtopics,
-            "df_topics":          df_topics,
-            "subtopic_names":     raw.get("subtopic_names", {}),
-            "topic_names":        raw.get("topic_names",    {}),
-            "section_names":      raw.get("section_names",  {}),
-            "horas_asignaturas":  raw.get("horas_asignaturas", {}),
-            "file_path":          f"JSON v{meta.get('fecha_generacion', '?')}",
-            "modo":               "json",
-            "metadata":           meta,
+            "df_leaves":      df_leaves,
+            "df_subtopics":   df_subtopics,
+            "df_topics":      df_topics,
+            "subtopic_names": raw.get("subtopic_names", {}),
+            "topic_names":    raw.get("topic_names",    {}),
+            "section_names":  raw.get("section_names",  {}),
+            "file_path":      f"JSON v{meta.get('fecha_generacion', '?')}",
+            "modo":           "json",
+            "metadata":       meta,
         }, None
     except Exception as exc:
         return None, f"Error al cargar datos JSON: {exc}"
@@ -314,9 +275,6 @@ def load_data(*, force_excel: bool = False) -> tuple[dict | None, str | None]:
             "seccion":   section,
             "descripcion": desc,
             "shoa":    _sum_cols(row, SHOA_COLS),
-            "shoa_T":  _safe_float(row.iloc[5]) if len(row) > 5 else 0.0,
-            "shoa_P":  _safe_float(row.iloc[6]) if len(row) > 6 else 0.0,
-            "shoa_SG": _safe_float(row.iloc[7]) if len(row) > 7 else 0.0,
             "padilla": _sum_cols(row, PADILLA_COLS),
             "sweden":  _sum_cols(row, SWEDEN_COLS),
             "uss":     _sum_cols(row, USS_COLS),
@@ -363,8 +321,7 @@ def load_data(*, force_excel: bool = False) -> tuple[dict | None, str | None]:
         "df_topics":      df_topics,
         "subtopic_names": subtopic_names,
         "topic_names":    topic_names,
-        "section_names":      section_names,
-        "horas_asignaturas":  _read_horas_asignaturas(tmp_path),
-        "file_path":          str(file_path),
-        "modo":               "excel",
+        "section_names":  section_names,
+        "file_path":      str(file_path),
+        "modo":           "excel",
     }, None
