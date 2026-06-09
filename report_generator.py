@@ -64,6 +64,14 @@ CLASIF_FILL= {"CRÍTICA": C_CRITICA,"ALTA": C_ALTA,"ALINEADA": C_ALIN,"SUBESTIMA
 PAGE_W, PAGE_H = A4
 MARGIN = 2 * cm
 
+_MESES_ES = {1:"enero",2:"febrero",3:"marzo",4:"abril",5:"mayo",6:"junio",
+             7:"julio",8:"agosto",9:"septiembre",10:"octubre",
+             11:"noviembre",12:"diciembre"}
+
+def _fecha_es() -> str:
+    d = date.today()
+    return f"{d.day} de {_MESES_ES[d.month]} de {d.year}"
+
 
 # ════════════════════════════════════════════════════════════════════════════
 # Canvas con numeración "Página X de Y"
@@ -181,8 +189,10 @@ def _tbl_style(data_rows: int, clasif_col: int | None = None,
         ("GRID",        (0, 0), (-1, -1), 0.4, colors.HexColor("#CCCCCC")),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, C_GRAY]),
         ("VALIGN",      (0, 0), (-1, -1), "MIDDLE"),
-        ("TOPPADDING",  (0, 0), (-1, -1), 3),
-        ("BOTTOMPADDING",(0,0), (-1, -1), 3),
+        ("TOPPADDING",  (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING",(0,0), (-1, -1), 6),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING",(0, 0), (-1, -1), 5),
     ]
     if clasif_col is not None and clf_vals:
         for i, v in enumerate(clf_vals, start=1):
@@ -284,38 +294,67 @@ def _chart_tpsg_donut(t: float, p: float, sg: float, title: str) -> io.BytesIO:
 # ════════════════════════════════════════════════════════════════════════════
 
 def _page_cover(s: dict, logo_path: str | None) -> list:
+    # Estilos locales de portada
+    _title = ParagraphStyle("cv_title", fontName="Helvetica-Bold",
+                             fontSize=28, textColor=C_NAVY,
+                             alignment=TA_CENTER, spaceAfter=0, leading=34)
+    _sub   = ParagraphStyle("cv_sub",   fontName="Helvetica",
+                             fontSize=14, textColor=colors.HexColor("#004A8F"),
+                             alignment=TA_CENTER, spaceAfter=0, leading=18)
+    _inst  = ParagraphStyle("cv_inst",  fontName="Helvetica",
+                             fontSize=12, textColor=C_TEXT,
+                             alignment=TA_CENTER, spaceAfter=0, leading=16)
+    _comp  = ParagraphStyle("cv_comp",  fontName="Helvetica",
+                             fontSize=11, textColor=C_TEXT,
+                             alignment=TA_CENTER, spaceAfter=0, leading=14)
+    _date  = ParagraphStyle("cv_date",  fontName="Helvetica",
+                             fontSize=10, textColor=colors.HexColor("#7F8C8D"),
+                             alignment=TA_CENTER, spaceAfter=0)
+
+    def _hr():
+        return HRFlowable(width="55%", thickness=2, color=C_GOLD,
+                          hAlign="CENTER", spaceAfter=0, spaceBefore=0)
+
     story = []
+
+    # ── Espacio superior ────────────────────────────────────────────────
     story.append(Spacer(1, 3*cm))
 
-    # Logo
+    # ── Logo ─────────────────────────────────────────────────────────────
     if logo_path and Path(logo_path).exists():
-        story.append(Image(logo_path, width=4*cm, height=4*cm,
-                           hAlign="CENTER"))
+        story.append(Image(logo_path, width=6*cm, height=6*cm, hAlign="CENTER"))
     else:
-        story.append(Paragraph("⚓", ParagraphStyle("anc", fontName="Helvetica-Bold",
-                                fontSize=48, textColor=C_NAVY, alignment=TA_CENTER)))
+        story.append(Paragraph(
+            "⚓",
+            ParagraphStyle("anc", fontName="Helvetica-Bold", fontSize=56,
+                           textColor=C_NAVY, alignment=TA_CENTER)))
+
+    story.append(Spacer(1, 1.5*cm))
+    story.append(_hr())
+    story.append(Spacer(1, 1.5*cm))
+
+    # ── Título y subtítulo ───────────────────────────────────────────────
+    story.append(Paragraph("Análisis Curricular Comparativo", _title))
     story.append(Spacer(1, 0.8*cm))
+    story.append(Paragraph(
+        "Propuesta de Ajuste basada en Estándares IHO Internacionales", _sub))
+    story.append(Spacer(1, 1.5*cm))
+    story.append(_hr())
+    story.append(Spacer(1, 1.5*cm))
 
-    story.append(HRFlowable(width="60%", thickness=2, color=C_GOLD,
-                             hAlign="CENTER", spaceAfter=12, spaceBefore=4))
-    story.append(Paragraph("Análisis Curricular Comparativo", s["cover_title"]))
+    # ── Institución y comparativa ────────────────────────────────────────
     story.append(Paragraph(
-        "Propuesta de Ajuste basada en Estándares IHO Internacionales",
-        s["cover_sub"]))
-    story.append(HRFlowable(width="60%", thickness=2, color=C_GOLD,
-                             hAlign="CENTER", spaceBefore=8, spaceAfter=20))
+        "Servicio Hidrográfico y Oceanográfico de la Armada de Chile", _inst))
+    story.append(Spacer(1, 0.5*cm))
+    story.append(Paragraph(
+        "Comparativa con:  Almirante Padilla  |  Sweden  |  USS  |  UCL", _comp))
 
+    # ── Fecha empujada al fondo ──────────────────────────────────────────
+    story.append(Spacer(1, 2.5*cm))
     story.append(Paragraph(
-        "Servicio Hidrográfico y Oceanográfico de la Armada de Chile",
-        s["cover_body"]))
-    story.append(Paragraph(
-        "Comparativa con: Almirante Padilla  |  Sweden  |  USS  |  UCL",
-        s["cover_body"]))
-    story.append(Spacer(1, 1*cm))
-    story.append(Paragraph(
-        f"Fecha de generación: {date.today().strftime('%d de %B de %Y').capitalize()}",
-        ParagraphStyle("date", fontName="Helvetica", fontSize=10,
-                       textColor=C_TEXT, alignment=TA_CENTER)))
+        f"Fecha de generación: {_fecha_es()}", _date))
+    story.append(Spacer(1, 2*cm))
+
     story.append(PageBreak())
     return story
 
@@ -758,8 +797,8 @@ def generate_pdf(data: dict) -> bytes:
 
     # Frames para cada template
     frame_cover     = Frame(MARGIN, MARGIN, PAGE_W-2*MARGIN, PAGE_H-2*MARGIN, id="cover")
-    frame_content   = Frame(MARGIN, 1.8*cm, PAGE_W-2*MARGIN, PAGE_H-3.6*cm, id="content")
-    frame_landscape = Frame(MARGIN, 1.8*cm, LW-2*MARGIN, LH-3.6*cm, id="landscape_f")
+    frame_content   = Frame(MARGIN, 1.8*cm, PAGE_W-2*MARGIN, PAGE_H-4.2*cm, id="content")
+    frame_landscape = Frame(MARGIN, 1.8*cm, LW-2*MARGIN,    LH-4.2*cm,    id="landscape_f")
 
     def make_canvas(*args, **kwargs):
         return _NumberedCanvas(*args, logo_path=logo_path, **kwargs)
