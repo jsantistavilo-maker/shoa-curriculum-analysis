@@ -27,6 +27,7 @@ from intervention_analysis import (
     compute_intervention_kpis, INTV_COLORS_HEX,
 )
 from intervention_sheet import build_intervention_excel
+from report_generator import generate_pdf
 
 # ---------------------------------------------------------------------------
 # Configuración de página
@@ -562,6 +563,26 @@ def main():
         )
         fig_pie.update_layout(height=320, paper_bgcolor="#F2F4F7")
         st.plotly_chart(fig_pie, use_container_width=True)
+
+        st.divider()
+
+        # ---- Resumen Ejecutivo PDF ----
+        st.markdown("#### 📄 Resumen Ejecutivo")
+        if st.button("📄 Descargar Resumen Ejecutivo PDF", type="primary",
+                     use_container_width=True):
+            with st.spinner("Generando resumen ejecutivo... esto puede tomar unos segundos"):
+                try:
+                    pdf_bytes = generate_pdf(data)
+                    st.download_button(
+                        label="⬇️ Haz clic aquí para descargar el PDF",
+                        data=pdf_bytes,
+                        file_name=f"SHOA_Resumen_Ejecutivo_{date.today().strftime('%Y%m%d')}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                    )
+                    st.success("✅ PDF generado correctamente.")
+                except Exception as e:
+                    st.error(f"Error al generar PDF: {e}")
 
         st.divider()
 
