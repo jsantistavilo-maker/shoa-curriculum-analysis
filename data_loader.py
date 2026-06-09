@@ -174,7 +174,8 @@ def _read_horas_asignaturas(excel_path: str) -> dict:
     try:
         df = pd.read_excel(excel_path, sheet_name=_HORAS_SHEET,
                            header=None, engine="openpyxl")
-    except Exception:
+    except Exception as exc:
+        print(f"⚠️  Hoja '{_HORAS_SHEET}' no encontrada: {exc}")
         return {}
 
     df.columns = range(len(df.columns))
