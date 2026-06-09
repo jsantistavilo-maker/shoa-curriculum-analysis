@@ -26,7 +26,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 
 # ── ReportLab ────────────────────────────────────────────────────────────
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.units import cm
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT, TA_JUSTIFY
 from reportlab.lib.styles import ParagraphStyle
@@ -90,41 +90,41 @@ class _NumberedCanvas(rl_canvas.Canvas):
 
     def _draw_header_footer(self, page_num: int, total: int):
         self.saveState()
+        # Detectar tamaño real de la página (portrait o landscape)
+        try:
+            pw, ph = self._pagesize
+        except (AttributeError, TypeError):
+            pw, ph = PAGE_W, PAGE_H
+
         # Línea dorada superior
         self.setStrokeColor(C_GOLD)
         self.setLineWidth(1.5)
-        self.line(MARGIN, PAGE_H - 1.5*cm, PAGE_W - MARGIN, PAGE_H - 1.5*cm)
-        # Logo pequeño en header (esquina superior izquierda)
+        self.line(MARGIN, ph - 1.5*cm, pw - MARGIN, ph - 1.5*cm)
+        # Logo
         if self._logo_path and Path(self._logo_path).exists():
             try:
-                self.drawImage(
-                    self._logo_path,
-                    MARGIN, PAGE_H - 1.4*cm,
-                    width=1.0*cm, height=1.0*cm,
-                    preserveAspectRatio=True, mask="auto",
-                )
+                self.drawImage(self._logo_path, MARGIN, ph - 1.4*cm,
+                               width=1.0*cm, height=1.0*cm,
+                               preserveAspectRatio=True, mask="auto")
             except Exception:
                 pass
-        # "SHOA" en header si no hay logo
         else:
             self.setFont("Helvetica-Bold", 7)
             self.setFillColor(C_NAVY)
-            self.drawString(MARGIN, PAGE_H - 1.2*cm, "SHOA")
+            self.drawString(MARGIN, ph - 1.2*cm, "SHOA")
         # Texto derecho header
         self.setFont("Helvetica", 7)
         self.setFillColor(C_TEXT)
-        self.drawRightString(
-            PAGE_W - MARGIN, PAGE_H - 1.2*cm,
-            "Análisis Curricular Comparativo"
-        )
+        self.drawRightString(pw - MARGIN, ph - 1.2*cm,
+                             "Análisis Curricular Comparativo")
         # Línea dorada inferior
         self.setStrokeColor(C_GOLD)
-        self.line(MARGIN, 1.4*cm, PAGE_W - MARGIN, 1.4*cm)
+        self.line(MARGIN, 1.4*cm, pw - MARGIN, 1.4*cm)
         # Número de página
         self.setFont("Helvetica", 7)
         self.setFillColor(C_TEXT)
         self.drawCentredString(
-            PAGE_W / 2, 0.8*cm,
+            pw / 2, 0.8*cm,
             f"Página {page_num} de {total}  |  SHOA © {date.today().year}  |  "
             "Servicio Hidrográfico y Oceanográfico de la Armada de Chile"
         )
@@ -519,13 +519,17 @@ def _page_tpsg_analysis(s: dict, df_leaves: pd.DataFrame,
         f"<b>{pct_P:.1f}%</b> a prácticas y <b>{pct_SG:.1f}%</b> a auto estudio. "
         f"El perfil dominante es <b>{'T — Teóricas' if pct_T >= pct_P and pct_T >= pct_SG else 'P — Prácticas' if pct_P >= pct_SG else 'SG — Auto estudio'}</b>.",
         s["body"]))
+    story.append(NextPageTemplate("landscape"))   # siguiente página = horizontal
     story.append(PageBreak())
     return story
 
 
 def _page_adjustment_proposal(s: dict, df_intv: pd.DataFrame) -> list:
-    story = [Paragraph("Propuesta de Ajuste Curricular", s["title"]),
-             _gold_line()]
+    """Página en LANDSCAPE — Propuesta de Ajuste Curricular."""
+    LW = landscape(A4)[0]   # ancho en landscape ≈ 29.7 cm
+    avail = LW - 2 * MARGIN
+
+    story = [Paragraph("Propuesta de Ajuste Curricular", s["title"]), _gold_line()]
     story.append(Paragraph(
         "Basada en convergencia con estándares internacionales IHO",
         s["subtitle"]))
@@ -538,21 +542,33 @@ def _page_adjustment_proposal(s: dict, df_intv: pd.DataFrame) -> list:
     criticas = df_intv[df_intv["clasificacion"].isin(["CRÍTICA","ALTA"])].copy()
     if criticas.empty:
         story.append(Paragraph("No se identificaron asignaturas para ajuste.", s["body"]))
+        story.append(NextPageTemplate("content"))
         story.append(PageBreak())
         return story
 
-    hdr = ["Asignatura","T act.","P act.","SG act.","Tot. act.",
-           "T sug.","P sug.","SG sug.","Tot. sug.",
-           "Reducción","Estrategia"]
+    def _trunc(name: str, n: int = 28) -> str:
+        return name if len(name) <= n else name[:n-1] + "…"
+
+    # Estilo de tabla con fuente 7pt
+    small_tbl = ParagraphStyle("smt", fontName="Helvetica", fontSize=7, textColor=C_TEXT)
+
+    hdr = ["Asignatura",
+           "T act.", "P act.", "SG act.", "Total",
+           "T sug.", "P sug.", "SG sug.", "T.Sug.",
+           "Reduc.", "Estrategia"]
+
     rows = [hdr]
     clf_vals = []
     for _, r in criticas.iterrows():
+        nombre = f"{r['codigo_asig']}: {_trunc(r['nombre_asig'])}"
         rows.append([
-            f"{r['codigo_asig']}: {r['nombre_asig'][:22]}",
-            f"{r['shoa_T']:.1f}",  f"{r['shoa_P']:.1f}",  f"{r['shoa_SG']:.1f}",  f"{r['shoa_total']:.1f}",
-            f"{r['sug_T']:.1f}",   f"{r['sug_P']:.1f}",   f"{r['sug_SG']:.1f}",   f"{r['sug_total']:.1f}",
-            f"{r['red_total']:+.1f} h",
-            r["estrategia"][:28],
+            nombre,
+            f"{r['shoa_T']:.1f}", f"{r['shoa_P']:.1f}",
+            f"{r['shoa_SG']:.1f}", f"{r['shoa_total']:.1f}",
+            f"{r['sug_T']:.1f}",  f"{r['sug_P']:.1f}",
+            f"{r['sug_SG']:.1f}", f"{r['sug_total']:.1f}",
+            f"{r['red_total']:+.1f}",
+            _trunc(r["estrategia"], 32),
         ])
         clf_vals.append(r["clasificacion"])
 
@@ -567,20 +583,42 @@ def _page_adjustment_proposal(s: dict, df_intv: pd.DataFrame) -> list:
         f"{criticas['sug_P'].sum():.1f}",
         f"{criticas['sug_SG'].sum():.1f}",
         f"{criticas['sug_total'].sum():.1f}",
-        f"{criticas['red_total'].sum():+.1f} h",
+        f"{criticas['red_total'].sum():+.1f}",
         "",
     ])
 
-    W = PAGE_W - 2*MARGIN
-    col_w = [3.2*cm, 0.9*cm,0.9*cm,0.9*cm,1.0*cm,
-             0.9*cm, 0.9*cm,0.9*cm,1.0*cm, 1.2*cm, 3.5*cm]
+    # Anchos de columna para landscape (~25.7 cm disponibles)
+    col_w = [5.0*cm,                          # Asignatura
+             1.2*cm, 1.2*cm, 1.2*cm, 1.4*cm, # T/P/SG/Total actuales
+             1.2*cm, 1.2*cm, 1.2*cm, 1.4*cm, # T/P/SG/T.Sug sugeridas
+             1.4*cm,                          # Reducción
+             4.3*cm]                          # Estrategia
+
     tbl = Table(rows, colWidths=col_w, repeatRows=1)
-    sty = _tbl_style(len(rows)-1, clasif_col=None, clf_vals=None)
-    sty.add("BACKGROUND", (0, len(rows)-1), (-1, len(rows)-1),
-            colors.HexColor("#FFF2CC"))
-    sty.add("FONTNAME",   (0, len(rows)-1), (-1, len(rows)-1), "Helvetica-Bold")
+    sty = _tbl_style(len(rows)-1, clasif_col=None)
+    sty.add("FONTSIZE",    (0, 0), (-1, -1), 7)
+    sty.add("FONTNAME",    (0, 0), (-1,  0), "Helvetica-Bold")
+    sty.add("BACKGROUND",  (0, len(rows)-1), (-1, len(rows)-1), colors.HexColor("#FFF2CC"))
+    sty.add("FONTNAME",    (0, len(rows)-1), (-1, len(rows)-1), "Helvetica-Bold")
+    # Colores clasificación por fila
+    for i, clf in enumerate(clf_vals, start=1):
+        fill = CLASIF_FILL.get(clf)
+        if fill:
+            sty.add("BACKGROUND", (0, i), (-1, i), fill)
+    # Colores de columnas T/P/SG
+    t_cols  = [1, 5]   # T actual, T sugerida
+    p_cols  = [2, 6]   # P actual, P sugerida
+    sg_cols = [3, 7]   # SG actual, SG sugerida
+    for ci in t_cols:
+        sty.add("BACKGROUND", (ci, 0), (ci, -1), colors.HexColor("#EBF5FB"))
+    for ci in p_cols:
+        sty.add("BACKGROUND", (ci, 0), (ci, -1), colors.HexColor("#EAFAF1"))
+    for ci in sg_cols:
+        sty.add("BACKGROUND", (ci, 0), (ci, -1), colors.HexColor("#FEFDE7"))
     tbl.setStyle(sty)
     story.append(tbl)
+
+    story.append(NextPageTemplate("content"))   # volver a portrait
     story.append(PageBreak())
     return story
 
@@ -640,38 +678,42 @@ def _page_conclusions(s: dict, df_intv: pd.DataFrame, kpis: dict,
     for i, p in enumerate(pasos, start=1):
         story.append(Paragraph(f"<b>{i}.</b> {p}", s["body"]))
 
+    story.append(NextPageTemplate("landscape"))   # anexo en landscape
     story.append(PageBreak())
     return story
 
 
 def _page_annex(s: dict, df_analyzed: pd.DataFrame) -> list:
+    """Página en LANDSCAPE — Detalle completo por sub-tópico IHO."""
     story = [Paragraph("Anexo — Detalle por Sub-Tópico IHO", s["title"]), _gold_line()]
     story.append(Paragraph(
         "Tabla completa de sub-tópicos con comparativa de horas entre currículos.",
         s["small"]))
     story.append(Spacer(1, 0.3*cm))
 
-    hdr = ["Sub-tópico", "SHOA", "Padilla", "Sweden", "USS", "UCL", "Prom. Int.", "Δ(h)", "Clasif."]
+    hdr = ["Sub-tópico / Descripción", "SHOA", "Padilla",
+           "Sweden", "USS", "UCL", "Prom. Int.", "Δ (h)", "Clasificación"]
     rows = [hdr]
     clf_vals = []
     for _, r in df_analyzed.iterrows():
-        nombre = str(r["nombre"])[:32]
+        nombre = str(r["nombre"])
+        nombre = nombre if len(nombre) <= 42 else nombre[:41] + "…"
         rows.append([
             nombre,
-            f"{r['shoa']:.1f}",
-            f"{r['padilla']:.1f}",
-            f"{r['sweden']:.1f}",
-            f"{r['uss']:.1f}",
-            f"{r['ucl']:.1f}",
-            f"{r['intl_avg']:.1f}",
-            f"{r['delta_avg']:+.1f}",
-            r["clasificacion"],
+            f"{r['shoa']:.1f}",    f"{r['padilla']:.1f}",
+            f"{r['sweden']:.1f}",  f"{r['uss']:.1f}",
+            f"{r['ucl']:.1f}",     f"{r['intl_avg']:.1f}",
+            f"{r['delta_avg']:+.1f}", r["clasificacion"],
         ])
         clf_vals.append(r["clasificacion"])
 
-    col_w = [4.8*cm, 1.2*cm,1.2*cm,1.2*cm,1.2*cm,1.2*cm,1.2*cm,1.2*cm,2.0*cm]
+    # Anchos landscape (~25.7 cm disponibles)
+    col_w = [7.5*cm, 1.5*cm,1.5*cm,1.5*cm,1.5*cm,1.5*cm,1.7*cm,1.5*cm,3.0*cm]
     tbl = Table(rows, colWidths=col_w, repeatRows=1)
-    tbl.setStyle(_tbl_style(len(rows)-1, clasif_col=8, clf_vals=clf_vals))
+    sty = _tbl_style(len(rows)-1, clasif_col=8, clf_vals=clf_vals)
+    sty.add("FONTSIZE", (0, 0), (-1, -1), 7)
+    sty.add("FONTNAME", (0, 0), (-1, 0),  "Helvetica-Bold")
+    tbl.setStyle(sty)
     story.append(tbl)
     return story
 
@@ -711,9 +753,13 @@ def generate_pdf(data: dict) -> bytes:
     buf = io.BytesIO()
     s   = _styles()
 
-    # Página frame (con espacio para header/footer)
-    frame_cover   = Frame(MARGIN, MARGIN, PAGE_W-2*MARGIN, PAGE_H-2*MARGIN, id="cover")
-    frame_content = Frame(MARGIN, 1.8*cm, PAGE_W-2*MARGIN, PAGE_H-3.6*cm, id="content")
+    # Dimensiones landscape
+    LW, LH = landscape(A4)
+
+    # Frames para cada template
+    frame_cover     = Frame(MARGIN, MARGIN, PAGE_W-2*MARGIN, PAGE_H-2*MARGIN, id="cover")
+    frame_content   = Frame(MARGIN, 1.8*cm, PAGE_W-2*MARGIN, PAGE_H-3.6*cm, id="content")
+    frame_landscape = Frame(MARGIN, 1.8*cm, LW-2*MARGIN, LH-3.6*cm, id="landscape_f")
 
     def make_canvas(*args, **kwargs):
         return _NumberedCanvas(*args, logo_path=logo_path, **kwargs)
@@ -725,8 +771,9 @@ def generate_pdf(data: dict) -> bytes:
         topMargin=MARGIN,  bottomMargin=MARGIN,
     )
     doc.addPageTemplates([
-        PageTemplate(id="cover",   frames=[frame_cover]),
-        PageTemplate(id="content", frames=[frame_content]),
+        PageTemplate(id="cover",     frames=[frame_cover],     pagesize=A4),
+        PageTemplate(id="content",   frames=[frame_content],   pagesize=A4),
+        PageTemplate(id="landscape", frames=[frame_landscape], pagesize=landscape(A4)),
     ])
 
     story = []
